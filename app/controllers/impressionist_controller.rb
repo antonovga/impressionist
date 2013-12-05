@@ -20,7 +20,10 @@ module ImpressionistController
           end
         else
           # we could create an impression anyway. for classes, too. why not?
-          raise "#{obj.class.to_s} is not impressionable!"
+          #raise "#{obj.class.to_s} is not impressionable!"
+          if unique_no_instance?(opts[:unique], message)
+            Impression.create(associative_create_statement({:message => message}))
+          end
         end
       end
     end
@@ -43,14 +46,14 @@ module ImpressionistController
     # creates a statment hash that contains default values for creating an impression via an AR relation.
     def associative_create_statement(query_params={})
       query_params.reverse_merge!(
-        :controller_name => controller_name,
-        :action_name => action_name,
-        :user_id => user_id,
-        :request_hash => @impressionist_hash,
-        :session_hash => session_hash,
-        :ip_address => request.remote_ip,
-        :referrer => request.referer
-        )
+          :controller_name => controller_name,
+          :action_name => action_name,
+          :user_id => user_id,
+          :request_hash => @impressionist_hash,
+          :session_hash => session_hash,
+          :ip_address => request.remote_ip,
+          :referrer => request.referer
+      )
     end
 
     private
@@ -58,7 +61,26 @@ module ImpressionistController
     def bypass
       Impressionist::Bots.bot?(request.user_agent)
     end
+    ########!!!!!!!!!
+    def unique_no_instance?(unique_opts, message=nil)
+      return unique_opts.blank? || !Impression.where(unique_query_no_obj(unique_opts, message)).exists?
+    end
+    def unique_query_no_obj(unique_opts, message=nil)
+      statement = {}.reverse_merge!(
+          :impressionable_type => nil,
+          :impressionable_id=> nil,
+          :message => message
+      )
+      statement = associative_create_statement(statement)
 
+      full_statement = statement
+      # reduce the full statement to the params we need for the specified unique options
+      unique_opts.reduce({}) do |query, param|
+        query[param] = full_statement[param]
+        query
+      end
+    end
+    #####!!!!!
     def unique_instance?(impressionable, unique_opts)
       return unique_opts.blank? || !impressionable.impressions.where(unique_query(unique_opts)).exists?
     end
@@ -80,9 +102,9 @@ module ImpressionistController
     # creates a statment hash that contains default values for creating an impression.
     def direct_create_statement(query_params={})
       query_params.reverse_merge!(
-        :impressionable_type => controller_name.singularize.camelize,
-        :impressionable_id=> params[:id]
-        )
+          :impressionable_type => controller_name.singularize.camelize,
+          :impressionable_id=> params[:id]
+      )
       associative_create_statement(query_params)
     end
 
